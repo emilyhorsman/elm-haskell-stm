@@ -20,12 +20,24 @@ type MyColour
     | Blue
 
 
+type alias Points =
+    Int
+
+
+type alias Timestamp =
+    Int
+
+
+type Score
+    = Score Points Timestamp
+
+
 type alias Model =
     { time : Float
     , colour : MyColour
     , score : Int
     , username : Maybe String
-    , scores : Dict.Dict String Int
+    , scores : Dict.Dict String Score
     }
 
 
@@ -80,8 +92,8 @@ getScoreLabel currentUser user score =
         user ++ ": " ++ toString score
 
 
-printHighScore : String -> Int -> ( String, Int ) -> Shape a
-printHighScore currentUser index ( user, score ) =
+printHighScore : String -> Int -> ( String, Score ) -> Shape a
+printHighScore currentUser index ( user, Score score _ ) =
     getScoreLabel currentUser user score
         |> text
         |> size 14
@@ -89,12 +101,34 @@ printHighScore currentUser index ( user, score ) =
         |> move ( 0, -20 * (toFloat index) )
 
 
+descendingCompareScore : (Score -> Int) -> ( String, Score ) -> ( String, Score ) -> Order
+descendingCompareScore lens ( _, a ) ( _, b ) =
+    case compare (lens a) (lens b) of
+        LT ->
+            GT
+
+        EQ ->
+            EQ
+
+        GT ->
+            LT
+
+
 viewHighScores : Model -> List (Shape a)
 viewHighScores model =
     case ( model.username, model.scores ) of
         ( Just username, scores ) ->
+            -- Take the thirty most recent scores and then show the highest
+            -- first! This way people playing at the same time can compete
+            -- against each other, instead of a really high but old score.
+            -- In the latter scenario, the chances of seeing your score on the
+            -- board would become low.
             scores
                 |> Dict.toList
+                |> List.sortWith (descendingCompareScore (\(Score _ time) -> time))
+                |> List.take 30
+                |> List.sortWith (descendingCompareScore (\(Score points _) -> points))
+                |> List.take 10
                 |> List.indexedMap (printHighScore username)
 
         _ ->
@@ -126,12 +160,12 @@ change old =
             Red
 
 
-assignScore : String -> Result String Int -> Model -> Model
-assignScore username resultScore model =
-    case ( username, resultScore, model ) of
-        ( username, Ok score, model ) ->
+assignScore : String -> Result String Points -> Result String Timestamp -> Model -> Model
+assignScore username resultScore resultTime model =
+    case ( username, resultScore, resultTime, model ) of
+        ( username, Ok score, Ok time, model ) ->
             { model
-                | scores = Dict.insert username score model.scores
+                | scores = Dict.insert username (Score score time) model.scores
             }
 
         _ ->
@@ -161,8 +195,8 @@ update msg model =
                     , Cmd.none
                     )
 
-                "AssignScore" :: username :: score :: [] ->
-                    ( assignScore username (String.toInt score) model
+                "AssignScore" :: username :: score :: time :: [] ->
+                    ( assignScore username (String.toInt score) (String.toInt time) model
                     , Cmd.none
                     )
 

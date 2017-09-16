@@ -11,8 +11,8 @@ const wss = new WebSocket.Server({ port: 8080 });
 
 
 const Scores = {
-    'alice-smith-foobar': 14,
-    'alice-smith-test': 8
+    'alice-smith-foobar': { score: 14, time: +(new Date()) },
+    'alice-smith-test': { score: 8, time: +(new Date()) }
 };
 
 
@@ -23,19 +23,30 @@ wss.on('connection', function(ws) {
             return;
         }
 
-        Scores[message] += 1;
+        Scores[message].score += 1;
+        Scores[message].time = +(new Date());
         console.log(Scores);
-        ws.send(['AssignScore', message, Scores[message].toString()].join(' '));
+        ws.send([
+            'AssignScore',
+            message,
+            Scores[message].score.toString(),
+            Scores[message].time.toString()
+        ].join(' '));
     });
 
     const username = randomWords({ exactly: 3, join: '-' });
-    Scores[username] = 0;
+    Scores[username] = { score: 0, time: +(new Date()) };
     ws.send('AssignUsername ' + username);
     Object.keys(Scores).forEach(function(key) {
-        if (Scores[key] === 0) {
+        if (Scores[key].score === 0) {
             return;
         }
 
-        ws.send(['AssignScore', key, Scores[key].toString()].join(' '));
+        ws.send([
+            'AssignScore',
+            key,
+            Scores[key].score.toString(),
+            Scores[key].time.toString()
+        ].join(' '));
     });
 });
