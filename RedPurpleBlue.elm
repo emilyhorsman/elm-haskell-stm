@@ -1,6 +1,8 @@
 module Main exposing (..)
 
 import GraphicSVG exposing (..)
+import WebSocket
+import Dict
 
 
 -- Definitions
@@ -9,6 +11,7 @@ import GraphicSVG exposing (..)
 type Message
     = Tick Float GetKeyState
     | Click
+    | WSReceiveMessage String
 
 
 type MyColour
@@ -21,6 +24,8 @@ type alias Model =
     { time : Float
     , colour : MyColour
     , score : Int
+    , username : Maybe String
+    , scores : Dict.Dict String Int
     }
 
 
@@ -31,6 +36,8 @@ init =
         Red
     , score =
         0
+    , username = Nothing
+    , scores = Dict.empty
     }
 
 
@@ -65,8 +72,41 @@ myColour c =
             rgb 0 0 255
 
 
+getScoreLabel : String -> String -> Int -> String
+getScoreLabel currentUser user score =
+    if currentUser == user then
+        user ++ " (you!): " ++ toString score
+    else
+        user ++ ": " ++ toString score
+
+
+printHighScore : String -> Int -> ( String, Int ) -> Shape a
+printHighScore currentUser index ( user, score ) =
+    getScoreLabel currentUser user score
+        |> text
+        |> size 14
+        |> filled black
+        |> move ( 0, -20 * (toFloat index) )
+
+
+viewHighScores : Model -> List (Shape a)
+viewHighScores model =
+    case ( model.username, model.scores ) of
+        ( Just username, scores ) ->
+            scores
+                |> Dict.toList
+                |> List.indexedMap (printHighScore username)
+
+        _ ->
+            [ text "No scores yet." |> size 14 |> filled black
+            ]
+
+
 view model =
-    collage 500 500 (myShapes model)
+    collage 500 500 <|
+        myShapes model
+            ++ [ viewHighScores model |> group |> move ( 0, -50 )
+               ]
 
 
 
@@ -86,19 +126,51 @@ change old =
             Red
 
 
+assignScore : String -> Result String Int -> Model -> Model
+assignScore username resultScore model =
+    case ( username, resultScore, model ) of
+        ( username, Ok score, model ) ->
+            { model
+                | scores = Dict.insert username score model.scores
+            }
+
+        _ ->
+            model
+
+
 update : Message -> Model -> ( Model, Cmd Message )
 update msg model =
-    case msg of
-        Tick t _ ->
+    case ( msg, model.username ) of
+        ( Tick t _, _ ) ->
             ( { model | time = t }, Cmd.none )
 
-        Click ->
+        ( Click, Just username ) ->
             ( { model
                 | colour = change model.colour
                 , score = model.score + 1
               }
-            , Cmd.none
+            , WebSocket.send "ws://localhost:8080/" username
             )
+
+        ( WSReceiveMessage input, _ ) ->
+            case String.split " " input of
+                "AssignUsername" :: username :: [] ->
+                    ( { model
+                        | username = Just username
+                      }
+                    , Cmd.none
+                    )
+
+                "AssignScore" :: username :: score :: [] ->
+                    ( assignScore username (String.toInt score) model
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
 
 
 
@@ -107,7 +179,7 @@ update msg model =
 
 subscriptions : Model -> Sub Message
 subscriptions model =
-    Sub.none
+    WebSocket.listen "ws://localhost:8080/" WSReceiveMessage
 
 
 main =

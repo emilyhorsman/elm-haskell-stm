@@ -1,0 +1,15 @@
+{
+  "name": "elmhaskellstm",
+  "version": "1.0.0",
+  "description": "",
+  "main": "prototype.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "random-words": "0.0.1",
+    "ws": "^3.2.0"
+  }
+}
